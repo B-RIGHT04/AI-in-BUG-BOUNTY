@@ -1,0 +1,11 @@
+# Always needed (default backend)
+anthropic>=0.40.0
+
+# Only needed if you use --backend openai
+# openai>=1.50.0
+
+# Only needed if you use --backend gemini
+# google-genai>=0.5.0
+
+# Only needed if you use --backend ollama
+# requests>=2.31.0
