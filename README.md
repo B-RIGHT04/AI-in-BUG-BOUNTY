@@ -5,19 +5,57 @@ Reads raw recon output, batches it, and runs it through one of the
 structured JSON **shortlist** — never a finding. Stage 4 (manual
 verification) and stage 5 (reporting) are still on you.
 
+## End-to-end workflow (recon tool → this pipeline → you)
+
+This pipeline doesn't do recon itself — it consumes the output of a
+separate recon tool (in Delight's case, the XSS Recon Automation
+project). The full loop:
+
+1. **Run the recon tool.** In that project: activate its venv, confirm
+   `config.yaml` has the right target active, run Phase 1 discovery +
+   Phase 2 param extraction as usual.
+2. **It writes output** to `data/<program>/urls/urls.txt` (plain URL
+   list) and `data/<program>/params/params.json` (structured param
+   data, see "Input format" below).
+3. **Switch to this project.** cd into `pipeline/`, activate *this*
+   project's venv (separate from the recon tool's), confirm your API
+   key env var is set for this shell.
+4. **Dry-run first**, pointing `--input` straight at a file from the
+   recon project — no copying needed:
+   ```bash
+   python run_triage.py --input ~/Documents/~xss-recon/data/dell_bounty/params/params.json --vuln sqli --backend gemini --dry-run
+   ```
+5. **Run it for real** once the preview looks right — drop `--dry-run`,
+   add `--output`. Repeat per vuln type and per input file (`urls.txt`
+   works well for idor/ssrf/xss; `params.json` is the stronger input
+   for sqli/idor since it carries parameter names and source).
+6. **Manually verify.** Open the output JSON, then work through the
+   "Human verification checklist" at the bottom of the matching
+   `prompt_library/*.md` file. Nothing here is a finding until you've
+   confirmed it yourself, in scope, with any required auth headers
+   (e.g. Dell's `X-Bug-Bounty` header) applied by the recon tool, not
+   this pipeline — this pipeline never contacts the target directly.
+
+**Before a real run against a live target (not vulnweb.com):** double
+check which backend you're using. Free-tier Gemini's terms allow your
+prompt data to be used to improve Google's models — fine for test data,
+worth a conscious choice once it's real target data. Paid Gemini and
+Claude don't have that trade-off.
+
 ## Setup
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt --break-system-packages   # or drop the flag inside a venv
-cp .env.example .env   # fill in ANTHROPIC_API_KEY at minimum
+cp .env.example .env   # fill in the key for whichever backend(s) you're using
 export $(cat .env | grep -v '^#' | xargs)   # or use python-dotenv / your own method
 ```
 
 Only install the extra package (`openai`, `google-genai`, or `requests`)
 for backends you actually plan to use — see the comments in
-`requirements.txt`.
+`requirements.txt`. `google-genai` is the one to install for the free
+Gemini tier: `pip install google-genai --break-system-packages`.
 
 ## Usage
 
@@ -43,12 +81,21 @@ export PIPELINE_BACKEND=gemini
 
 ## Input format
 
-- Everything except `logic` expects `--input` to be a plain text file,
-  one recon item (URL, endpoint) per line — e.g. straight out of `gau`,
-  `katana`, or `httpx`.
-- `logic` (business logic) expects `--input` to be a short paragraph
-  *you write* describing a workflow's intended sequence. It runs once,
-  not batched — see `prompt_library/07_business_logic.md`.
+`--input` accepts three shapes, auto-detected:
+
+- **Plain text, one item per line** — a URL or endpoint per line, e.g.
+  straight out of `gau`, `katana`, `httpx`, or the recon tool's
+  `urls.txt`. Used by everything except `logic`.
+- **`params.json`** (any file ending in `.json`) — the structured
+  parameter format the recon tool's Phase 2 extraction writes: a JSON
+  array of `{url, param, source, method}` objects, where `source` is
+  `"url"`, `"js"`, or `"html_form"`. Exact duplicates are deduped
+  automatically. The `source` field is passed through to the AI, so it
+  can weigh a confirmed form field differently from a regex-guessed JS
+  reference. Best input for `sqli` and `idor` specifically.
+- **A short paragraph you write** — only for `logic` (business logic),
+  describing a workflow's intended sequence. Runs once, not batched —
+  see `prompt_library/07_business_logic.md`.
 
 ## Guardrails carried over from `ai_bugbounty.md`
 
