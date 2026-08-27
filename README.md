@@ -8,7 +8,7 @@ verification) and stage 5 (reporting) are still on you.
 ## End-to-end workflow (recon tool → this pipeline → you)
 
 This pipeline doesn't do recon itself — it consumes the output of a
-separate recon tool (the Recon Automation
+separate recon tool (the Automated_Recon
 project). The full loop:
 
 1. **Run the recon tool.** In that project: activate its venv, confirm
